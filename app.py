@@ -10,7 +10,6 @@ st.set_page_config(page_title="HP Soluções - Orçamentos", layout="wide", init
 def conectar_db():
     conn = sqlite3.connect('hp_solucoes_db.sqlite')
     cursor = conn.cursor()
-    # Tabela de Catálogo de Preços
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS catalogo (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,30 +22,6 @@ def conectar_db():
     return conn
 
 conn = conectar_db()
-
-# --- ESTILIZAÇÃO CUSTOMIZADA (CSS) ---
-st.markdown("""
-<style>
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #f0f2f6;
-        border-radius: 4px 4px 0px 0px;
-        padding: 10px 20px;
-        font-weight: bold;
-    }
-    .stTabs [aria-selected="true"] { 
-        background-color: #0B43A1 !important; 
-        color: white !important;
-    }
-    .proposta-container {
-        background-color: white;
-        padding: 40px;
-        border: 1px solid #ddd;
-        font-family: Arial, sans-serif;
-        color: #333;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # --- CORPO DO APLICATIVO ---
 st.title("💼 Sistema de Gestão de Orçamentos — HP Soluções")
@@ -76,7 +51,6 @@ with aba1:
             conn.commit()
             st.success(f"'{novo_servico}' adicionado com sucesso!")
 
-    # Exibir itens cadastrados
     st.subheader("Itens Cadastrados no Sistema")
     df_itens = pd.read_sql_query("SELECT id as ID, servico as 'Serviço/Material', descricao as 'Descrição', preco_base as 'Preço Base (R$)' FROM catalogo", conn)
     
@@ -85,7 +59,6 @@ with aba1:
     else:
         st.dataframe(df_itens, use_container_width=True, hide_index=True)
         
-        # Botão para deletar itens se necessário
         item_deletar = st.selectbox("Selecione um ID para remover se cadastrou errado:", [""] + df_itens["ID"].tolist())
         if st.button("❌ Excluir Item Selecionado") and item_deletar != "":
             cursor = conn.cursor()
@@ -118,7 +91,6 @@ with aba2:
         
         col_m1, col_m2 = st.columns(2)
         with col_m1:
-            # MARGEM DE LUCRO SOLICITADA
             margem_lucro = st.slider("Margem de Lucro Desejada (%)", min_value=0, max_value=200, value=30, step=5)
         with col_m2:
             forma_pagamento = st.text_input("Forma de Pagamento:", "Cartão (1x) ou Pix")
@@ -126,7 +98,6 @@ with aba2:
         st.write("---")
         st.subheader("Seleção de Itens da Proposta")
         
-        # Selecionar múltiplos itens do banco de dados
         lista_servicos = df_itens['Serviço/Material'].tolist()
         itens_selecionados = st.multiselect("Selecione os serviços/produtos que entram neste orçamento:", lista_servicos)
         
@@ -135,12 +106,10 @@ with aba2:
         
         if itens_selecionados:
             for item in itens_selecionados:
-                # Puxa os dados originais do banco de dados
                 row = df_itens[df_itens['Serviço/Material'] == item].iloc[0]
                 preco_original = row['Preço Base (R$)']
                 desc_original = row['Descrição']
                 
-                # Aplica a margem de lucro calculada: Preço final = Preço Base * (1 + Margem/100)
                 preco_com_margem = float(preco_original) * (1 + (margem_lucro / 100))
                 
                 st.markdown(f"**🔹 {item}** | Preço Base: R$ {preco_original:.2f} ➔ **Com Margem ({margem_lucro}%): R$ {preco_com_margem:.2f}**")
@@ -162,7 +131,6 @@ with aba2:
         custo_mao_de_obra = horas_estimadas * valor_hora
         valor_final_calculado = custo_total_itens + custo_mao_de_obra
         
-        # Salva o estado para a Aba 3 ler
         st.session_state['dados_proposta'] = {
             "cliente": {"nome": cliente_nome, "cnpj": cliente_cnpj, "endereco": cliente_endereco, "contato": cliente_contato, "responsavel": cliente_resp, "email": cliente_email},
             "itens": dados_orcamento_atual,
@@ -171,119 +139,116 @@ with aba2:
             "pagamento": forma_pagamento
         }
         
-        st.success(f"🎉 Tudo pronto! O valor calculado deu R$ {valor_final_calculado:.2f}. Vá para a Aba 3 para ver o resultado.")
+        st.success(f"🎉 Calculado com sucesso! Valor total: R$ {valor_final_calculado:.2f}. Vá para a Aba 3.")
 
 # ==========================================
-# ABA 3: PROPOSTA COMERCIAL (Fiel ao image_dfff4d.png)
+# ABA 3: PROPOSTA COMERCIAL (CORRIGIDA)
 # ==========================================
 with aba3:
     if 'dados_proposta' not in st.session_state:
-        st.info("Aguardando dados da configuração. Monte o orçamento na Aba 2 primeiro.")
+        st.info("Aguardando dados. Monte o orçamento na Aba 2 primeiro.")
     else:
         dp = st.session_state['dados_proposta']
         
-        st.warning("💡 Dica: Para salvar como PDF, clique com o botão direito na página e selecione 'Imprimir' ou use Ctrl+P.")
+        st.warning("💡 Para salvar como PDF: Pressione Ctrl+P (ou Cmd+P no Mac) e selecione 'Salvar como PDF'.")
         
-        # DESIGN DA PÁGINA EM HTML SIMULANDO A FOLHA DA IMAGEM
-        linhas_tabela_html = ""
+        # Gerando as linhas da tabela dinamicamente de forma segura
+        linhas_html = ""
         for it in dp['itens']:
-            # Quebra as linhas da descrição para gerar a lista numérica
-            desc_formatada = "".join([f"<div>{linha.strip()}</div>" for linha in it['descricao'].split('\n') if linha.strip()])
-            linhas_tabela_html += f"""
+            linhas_desc = "".join([f"<div>• {l.strip()}</div>" for l in it['descricao'].split('\n') if l.strip()])
+            linhas_html += f"""
             <tr>
                 <td style="border: 1px solid #e0e0e0; padding: 12px; font-weight: bold; width: 30%; color: #333;">{it['servico']}</td>
-                <td style="border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; color: #555; width: 50%;">{desc_formatada}</td>
+                <td style="border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; color: #555; width: 50%; text-align: left;">{linhas_desc}</td>
                 <td style="border: 1px solid #e0e0e0; padding: 12px; text-align: center; font-weight: bold; width: 20%; color: #333;">R$ {it['valor']:.2f}</td>
             </tr>
             """
             
         if dp['mao_de_obra'] > 0:
-            linhas_tabela_html += f"""
+            linhas_html += f"""
             <tr>
-                <td style="border: 1px solid #e0e0e0; padding: 12px; font-weight: bold; color: #333;">Mão de Obra Técnica</td>
-                <td style="border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; color: #555;">Execução, montagem e horas de engenharia aplicadas ao projeto.</td>
+                <td style="border: 1px solid #e0e0e0; padding: 12px; font-weight: bold; color: #333;">Mão de Obra / Execução</td>
+                <td style="border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; color: #555; text-align: left;">Tempo técnico dedicado à execução dos serviços solicitados.</td>
                 <td style="border: 1px solid #e0e0e0; padding: 12px; text-align: center; font-weight: bold; color: #333;">R$ {dp['mao_de_obra']:.2f}</td>
             </tr>
             """
 
-        html_folha = f"""
-        <div class="proposta-container" style="position: relative; border-top: 15px solid #0B43A1; border-left: 5px solid #0B43A1; min-height: 1000px;">
-            <!-- CABEÇALHO -->
-            <table style="width: 100%; border: none; margin-bottom: 30px;">
+        # O segredo da correção está aqui: Injetando a folha limpa sem travar strings
+        st.components.v1.html(f"""
+        <div style="background-color: white; padding: 30px; border: 1px solid #ddd; font-family: Arial, sans-serif; color: #333; border-top: 15px solid #0B43A1; min-height: 900px; box-sizing: border-box;">
+            
+            <!-- CABEÇALHO DA FOTO -->
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
                 <tr>
-                    <td style="width: 45%;">
-                        <!-- LOGO CIRCULAR -->
-                        <div style="width: 140px; height: 140px; border-radius: 50%; background: #222; border: 4px solid #B58A3D; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: white; padding: 10px; box-shadow: 2px 2px 8px rgba(0,0,0,0.2);">
-                            <div style="font-weight: bold; font-size: 14px; letter-spacing: 1px; color: #B58A3D;">HP</div>
-                            <div style="font-size: 9px; font-weight: bold; margin-bottom: 4px;">SOLUÇÕES</div>
-                            <div style="font-size: 6px; color: #ccc; border-top: 1px solid #44px; padding-top: 3px; line-height: 1.2;">PINTURA | ELÉTRICA<br>HIDRÁULICA<br>RESIDENCIAL E PREDIAL</div>
+                    <td style="width: 40%; vertical-align: middle;">
+                        <div style="width: 130px; height: 130px; border-radius: 50%; background: #222; border: 4px solid #B58A3D; text-align: center; color: white; display: inline-block; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);">
+                            <div style="font-weight: bold; font-size: 15px; margin-top: 25px; color: #B58A3D; letter-spacing: 1px;">HP</div>
+                            <div style="font-size: 10px; font-weight: bold; margin-bottom: 5px;">SOLUÇÕES</div>
+                            <div style="font-size: 6px; color: #ccc; border-top: 1px solid #444; padding-top: 3px; line-height: 1.2;">PINTURA | ELÉTRICA<br>HIDRÁULICA</div>
                         </div>
                     </td>
-                    <td style="text-align: right; font-family: sans-serif; line-height: 1.4;">
-                        <h2 style="color: #000; margin: 0; font-size: 24px; letter-spacing: 1px;">HP SOLUÇÕES</h2>
-                        <div style="font-size: 12px; font-weight: bold; color: #444; margin-bottom: 5px;">CNPJ: 66.799.072/0001-59</div>
-                        <div style="font-size: 12px; color: #555;">hpsolucoes@gmail.com ✉️</div>
-                        <div style="font-size: 12px; color: #555; font-weight: bold; color: #0B43A1;">(47) 99637-2330 📞</div>
-                        <div style="font-size: 12px; color: #555; font-weight: bold; color: #0B43A1;">(47) 99188-1921 📞</div>
+                    <td style="text-align: right; vertical-align: middle; line-height: 1.4;">
+                        <h2 style="color: #0B43A1; margin: 0; font-size: 24px; font-weight: bold;">HP SOLUÇÕES</h2>
+                        <div style="font-size: 12px; font-weight: bold; color: #444;">CNPJ: 66.799.072/0001-59</div>
+                        <div style="font-size: 12px; color: #555;">hpsolucoes@gmail.com</div>
+                        <div style="font-size: 12px; color: #0B43A1; font-weight: bold;">(47) 99637-2330 | (47) 99188-1921</div>
                     </td>
                 </tr>
             </table>
 
-            <h1 style="color: #0B43A1; text-align: center; font-size: 26px; margin-bottom: 25px; border-bottom: 2px solid #0B43A1; padding-bottom: 10px;">PROPOSTA COMERCIAL / ORÇAMENTO</h1>
+            <h1 style="color: #0B43A1; text-align: center; font-size: 22px; margin: 20px 0; border-bottom: 2px solid #0B43A1; padding-bottom: 8px; font-weight: bold; letter-spacing: 0.5px;">PROPOSTA COMERCIAL / ORÇAMENTO</h1>
             
-            <div style="text-align: right; margin-bottom: 20px; font-size: 14px; font-weight: bold; color: #333;">
-                Data: {datetime.now().strftime('%d/%m/%Y')} <br>
-                Nº do Orçamento: 0001
-            </div>
+            <table style="width: 100%; margin-bottom: 20px; font-size: 13px;">
+                <tr>
+                    <td style="line-height: 1.6;">
+                        <span style="color: #0B43A1; font-weight: bold; font-size: 14px;">CLIENTE:</span><br>
+                        <strong>{dp['cliente']['nome']}</strong><br>
+                        CNPJ: {dp['cliente']['cnpj']}<br>
+                        Endereço: {dp['cliente']['endereco']}<br>
+                        Contato: {dp['cliente']['contato']}<br>
+                        Responsável: {dp['cliente']['responsavel']}<br>
+                        E-mail: {dp['cliente']['email']}
+                    </td>
+                    <td style="text-align: right; vertical-align: top; font-weight: bold; line-height: 1.5;">
+                        Data: {datetime.now().strftime('%d/%m/%Y')}<br>
+                        Nº do Orçamento: 0001
+                    </td>
+                </tr>
+            </table>
 
-            <!-- DADOS DO CLIENTE -->
-            <div style="margin-bottom: 30px; line-height: 1.6; font-size: 14px;">
-                <strong style="color: #0B43A1; font-size: 16px;">CLIENTE:</strong><br>
-                <strong>{dp['cliente']['nome']}</strong><br>
-                CGC/CNPJ: {dp['cliente']['cnpj']}<br>
-                Endereço: {dp['cliente']['endereco']}<br>
-                Contato: {dp['cliente']['contato']}<br>
-                Responsável: {dp['cliente']['responsavel']}<br>
-                E-mail: {dp['cliente']['email']}
-            </div>
-
-            <!-- TABELA DE PREÇOS -->
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+            <!-- TABELA DE ITENS -->
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 13px;">
                 <thead>
-                    <tr style="background-color: #0B43A1; color: white; text-align: left;">
-                        <th style="padding: 12px; border: 1px solid #0B43A1;">SERVIÇO</th>
-                        <th style="padding: 12px; border: 1px solid #0B43A1;">DESCRIÇÃO</th>
-                        <th style="padding: 12px; border: 1px solid #0B43A1; text-align: center;">VALOR</th>
+                    <tr style="background-color: #0B43A1; color: white;">
+                        <th style="padding: 10px; border: 1px solid #0B43A1; text-align: left;">SERVIÇO</th>
+                        <th style="padding: 10px; border: 1px solid #0B43A1; text-align: left;">DESCRIÇÃO</th>
+                        <th style="padding: 10px; border: 1px solid #0B43A1; text-align: center;">VALOR</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {linhas_tabela_html}
+                    {linhas_html}
                 </tbody>
             </table>
 
-            <!-- TOTALIZADOR -->
-            <div style="text-align: right; margin-bottom: 40px;">
-                <span style="background-color: #0B43A1; color: white; padding: 12px 35px; font-size: 18px; font-weight: bold; border-radius: 4px;">
+            <!-- TOTAL -->
+            <div style="text-align: right; margin-bottom: 30px;">
+                <span style="background-color: #0B43A1; color: white; padding: 10px 30px; font-size: 16px; font-weight: bold; display: inline-block;">
                     TOTAL: R$ {dp['total']:.2f}
                 </span>
             </div>
 
             <!-- TERMOS -->
-            <div style="margin-bottom: 40px; font-size: 14px; line-height: 1.5;">
-                <h4 style="color: #0B43A1; margin-bottom: 5px;">FORMA DE PAGAMENTO</h4>
-                <p style="margin: 0 0 15px 0;">{dp['pagamento']}</p>
-                
-                <h4 style="color: #0B43A1; margin-bottom: 5px;">TERMOS E CONDIÇÕES</h4>
-                <p style="margin: 0;">Este orçamento é válido por 30 dias.</p>
+            <div style="font-size: 13px; line-height: 1.5; margin-bottom: 40px;">
+                <strong style="color: #0B43A1;">FORMA DE PAGAMENTO</strong><br>
+                {dp['pagamento']}<br><br>
+                <strong style="color: #0B43A1;">TERMOS E CONDIÇÕES</strong><br>
+                Este orçamento é válido por 30 dias.
             </div>
 
-            <div style="margin-top: 20px; font-weight: bold; color: #0B43A1; font-size: 14px;">ASSINATURA</div>
-            <div style="width: 250px; border-bottom: 1px solid #333; margin-top: 40px;"></div>
-            
-            <!-- MARCA D'ÁGUA DE CANTO INFERIOR (ÍCONES SIMULADOS) -->
-            <div style="position: absolute; bottom: 15px; right: 20px; text-align: right; color: #eaeaea; font-size: 70px; font-weight: bold; user-select: none; z-index: 0; pointer-events: none; line-height: 0.8;">
-                🏠⚡🛠️
+            <!-- ASSINATURA -->
+            <div style="margin-top: 50px; font-size: 13px;">
+                <div style="font-weight: bold; color: #0B43A1;">ASSINATURA</div>
+                <div style="width: 200px; border-bottom: 1px solid #666; margin-top: 35px;"></div>
             </div>
         </div>
-        """
-        st.markdown(html_folha, unsafe_allow_html=True)
+        """, height=1000, scrolling=True)
